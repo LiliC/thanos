@@ -49,6 +49,7 @@ func RegisterWritableStoreServer(storeSrv storepb.WriteableStoreServer) func(*gr
 
 // ReadWriteTSDBStore is a TSDBStore that can also be written to.
 type ReadWriteTSDBStore struct {
+	storepb.InfoServer
 	storepb.StoreServer
 	storepb.WriteableStoreServer
 }

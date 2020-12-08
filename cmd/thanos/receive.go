@@ -456,18 +456,23 @@ func runReceive(
 					s.Shutdown(errors.New("reload hashrings"))
 				}
 
+				rs := store.NewMultiTSDBStore(
+					logger,
+					reg,
+					comp,
+					dbs.TSDBStores,
+					dbs.InfoAPIs,
+				)
+
 				rw := store.ReadWriteTSDBStore{
-					StoreServer: store.NewMultiTSDBStore(
-						logger,
-						reg,
-						comp,
-						dbs.TSDBStores,
-					),
+					InfoServer:           rs,
+					StoreServer:          rs,
 					WriteableStoreServer: webHandler,
 				}
 
 				s = grpcserver.New(logger, &receive.UnRegisterer{Registerer: reg}, tracer, comp, grpcProbe,
 					grpcserver.WithServer(store.RegisterStoreServer(rw)),
+					grpcserver.WithServer(store.RegisterInfoServer(rw)),
 					grpcserver.WithServer(store.RegisterWritableStoreServer(rw)),
 					grpcserver.WithListen(grpcBindAddr),
 					grpcserver.WithGracePeriod(grpcGracePeriod),

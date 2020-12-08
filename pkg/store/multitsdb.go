@@ -34,10 +34,16 @@ type MultiTSDBStore struct {
 	logger     log.Logger
 	component  component.SourceStoreAPI
 	tsdbStores func() map[string]storepb.StoreServer
+	infoAPIs   func() map[string]storepb.InfoServer
 }
 
 // NewMultiTSDBStore creates a new MultiTSDBStore.
-func NewMultiTSDBStore(logger log.Logger, _ prometheus.Registerer, component component.SourceStoreAPI, tsdbStores func() map[string]storepb.StoreServer) *MultiTSDBStore {
+func NewMultiTSDBStore(logger log.Logger,
+	_ prometheus.Registerer,
+	component component.SourceStoreAPI,
+	tsdbStores func() map[string]storepb.StoreServer,
+	infoAPIs func() map[string]storepb.InfoServer,
+) *MultiTSDBStore {
 	if logger == nil {
 		logger = log.NewNopLogger()
 	}
@@ -45,12 +51,13 @@ func NewMultiTSDBStore(logger log.Logger, _ prometheus.Registerer, component com
 		logger:     logger,
 		component:  component,
 		tsdbStores: tsdbStores,
+		infoAPIs:   infoAPIs,
 	}
 }
 
 // Info returns store merged information about the underlying TSDBStore instances.
 func (s *MultiTSDBStore) Info(ctx context.Context, req *storepb.InfoRequest) (*storepb.InfoResponse, error) {
-	stores := s.tsdbStores()
+	stores := s.infoAPIs()
 
 	resp := &storepb.InfoResponse{
 		StoreType: s.component.ToProto(),

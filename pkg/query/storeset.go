@@ -38,7 +38,7 @@ type StoreSpec interface {
 	// If metadata call fails we assume that store is no longer accessible and we should not use it.
 	// NOTE: It is implementation responsibility to retry until context timeout, but a caller responsibility to manage
 	// given store connection.
-	Metadata(ctx context.Context, client storepb.StoreClient) (labelSets []labels.Labels, mint int64, maxt int64, storeType component.StoreAPI, err error)
+	Metadata(ctx context.Context, client storepb.InfoClient) (labelSets []labels.Labels, mint int64, maxt int64, storeType component.StoreAPI, err error)
 
 	// StrictStatic returns true if the StoreAPI has been statically defined and it is under a strict mode.
 	StrictStatic() bool
@@ -75,6 +75,11 @@ type StoreStatus struct {
 	MaxTime   int64              `json:"maxTime"`
 }
 
+type grpcInfoSpec struct {
+	addr         string
+	strictstatic bool
+}
+
 type grpcStoreSpec struct {
 	addr         string
 	strictstatic bool
@@ -98,7 +103,7 @@ func (s *grpcStoreSpec) Addr() string {
 
 // Metadata method for gRPC store API tries to reach host Info method until context timeout. If we are unable to get metadata after
 // that time, we assume that the host is unhealthy and return error.
-func (s *grpcStoreSpec) Metadata(ctx context.Context, client storepb.StoreClient) (labelSets []labels.Labels, mint int64, maxt int64, Type component.StoreAPI, err error) {
+func (s *grpcStoreSpec) Metadata(ctx context.Context, client storepb.InfoClient) (labelSets []labels.Labels, mint int64, maxt int64, Type component.StoreAPI, err error) {
 	resp, err := client.Info(ctx, &storepb.InfoRequest{}, grpc.WaitForReady(true))
 	if err != nil {
 		return nil, 0, 0, nil, errors.Wrapf(err, "fetching store info from %s", s.addr)
@@ -238,6 +243,7 @@ func NewStoreSet(
 // TODO(bwplotka): Consider moving storeRef out of this package and renaming it, as it also supports rules API.
 type storeRef struct {
 	storepb.StoreClient
+	storepb.InfoClient
 
 	mtx  sync.RWMutex
 	cc   *grpc.ClientConn
@@ -273,8 +279,10 @@ func (s *storeRef) StoreType() component.StoreAPI {
 }
 
 func (s *storeRef) HasRulesAPI() bool {
+	fmt.Println("hasrulesapi")
 	s.mtx.RLock()
 	defer s.mtx.RUnlock()
+	fmt.Println(s.rule)
 
 	return s.rule != nil
 }
@@ -380,6 +388,8 @@ func (s *StoreSet) Update(ctx context.Context) {
 		stores[addr] = st
 		s.updateStoreStatus(st, nil)
 
+		fmt.Println("lets check if we have the rule?")
+		fmt.Println(st.rule)
 		if st.HasRulesAPI() {
 			level.Info(s.logger).Log("msg", "adding new rulesAPI to query storeset", "address", addr)
 		}
@@ -438,7 +448,7 @@ func (s *StoreSet) getActiveStores(ctx context.Context, stores map[string]*store
 					return
 				}
 
-				st = &storeRef{StoreClient: storepb.NewStoreClient(conn), storeType: component.UnknownStoreAPI, cc: conn, addr: addr, logger: s.logger}
+				st = &storeRef{StoreClient: storepb.NewStoreClient(conn), InfoClient: storepb.NewInfoClient(conn), storeType: component.UnknownStoreAPI, cc: conn, addr: addr, logger: s.logger}
 			}
 
 			var rule rulespb.RulesClient
@@ -447,7 +457,7 @@ func (s *StoreSet) getActiveStores(ctx context.Context, stores map[string]*store
 			}
 
 			// Check existing or new store. Is it healthy? What are current metadata?
-			labelSets, minTime, maxTime, storeType, err := spec.Metadata(ctx, st.StoreClient)
+			labelSets, minTime, maxTime, storeType, err := spec.Metadata(ctx, st.InfoClient)
 			if err != nil {
 				if !seenAlready && !spec.StrictStatic() {
 					// Close only if new and not a strict static node.
@@ -468,6 +478,7 @@ func (s *StoreSet) getActiveStores(ctx context.Context, stores map[string]*store
 				activeStores[addr] = st
 				return
 			}
+			fmt.Printf("storeset update: rule: %#+v\n", rule)
 
 			s.updateStoreStatus(st, nil)
 			st.Update(labelSets, minTime, maxTime, storeType, rule)
@@ -545,9 +556,14 @@ func (s *StoreSet) GetRulesClients() []rulespb.RulesClient {
 	s.storesMtx.RLock()
 	defer s.storesMtx.RUnlock()
 
+	level.Debug(s.logger).Log("getrulesclients", "hasrules?")
 	rules := make([]rulespb.RulesClient, 0, len(s.stores))
 	for _, st := range s.stores {
+		fmt.Println("do we have a rule as part of this store")
+		level.Debug(s.logger).Log("getrulesclients", "hasrules?", st.HasRulesAPI())
 		if st.HasRulesAPI() {
+			fmt.Println("we have rule")
+			fmt.Println(st.rule)
 			rules = append(rules, st.rule)
 		}
 	}

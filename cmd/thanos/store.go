@@ -354,6 +354,7 @@ func runStore(
 
 		s := grpcserver.New(logger, reg, tracer, component, grpcProbe,
 			grpcserver.WithServer(store.RegisterStoreServer(bs)),
+			grpcserver.WithServer(store.RegisterInfoServer(bs)),
 			grpcserver.WithListen(grpcBindAddr),
 			grpcserver.WithGracePeriod(grpcGracePeriod),
 			grpcserver.WithTLSConfig(tlsCfg),

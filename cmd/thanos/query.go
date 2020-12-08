@@ -289,18 +289,23 @@ func runQuery(
 			reg,
 			func() (specs []query.StoreSpec) {
 
+				level.Debug(logger).Log("getnewstore", "storeaddr")
 				// Add strict & static nodes.
 				for _, addr := range strictStores {
+					level.Debug(logger).Log("getnewstore", "storestrictaddr", addr)
 					specs = append(specs, query.NewGRPCStoreSpec(addr, true))
 				}
 				// Add DNS resolved addresses from static flags and file SD.
 				for _, addr := range dnsStoreProvider.Addresses() {
+					level.Debug(logger).Log("getnewstore", "storeresolvedaddr", addr)
 					specs = append(specs, query.NewGRPCStoreSpec(addr, false))
 				}
 				return removeDuplicateStoreSpecs(logger, duplicatedStores, specs)
 			},
 			func() (specs []query.RuleSpec) {
+				level.Debug(logger).Log("getrulestore", "ruleaddr:")
 				for _, addr := range dnsRuleProvider.Addresses() {
+					level.Debug(logger).Log("getrules", "ruleaddr", addr)
 					specs = append(specs, query.NewGRPCStoreSpec(addr, false))
 				}
 
@@ -393,9 +398,15 @@ func runQuery(
 			return runutil.Repeat(dnsSDInterval, ctx.Done(), func() error {
 				resolveCtx, resolveCancel := context.WithTimeout(ctx, dnsSDInterval)
 				defer resolveCancel()
+				blah := append(fileSDCache.Addresses(), storeAddrs...)
+				fmt.Printf("store addresses %#+v \n", blah)
 				if err := dnsStoreProvider.Resolve(resolveCtx, append(fileSDCache.Addresses(), storeAddrs...)); err != nil {
 					level.Error(logger).Log("msg", "failed to resolve addresses for storeAPIs", "err", err)
 				}
+				level.Debug(logger).Log("resolver", "trying to resolve rules api", ruleAddrs)
+
+				fmt.Printf("rules ddresses %#+v \n", ruleAddrs)
+				// TODO: why not ... here?
 				if err := dnsRuleProvider.Resolve(resolveCtx, ruleAddrs); err != nil {
 					level.Error(logger).Log("msg", "failed to resolve addresses for rulesAPIs", "err", err)
 				}

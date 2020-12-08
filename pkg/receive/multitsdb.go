@@ -74,6 +74,7 @@ func NewMultiTSDB(
 type tenant struct {
 	readyS    *ReadyStorage
 	storeTSDB *store.TSDBStore
+	infoAPI   storepb.InfoServer
 	ship      *shipper.Shipper
 
 	mtx *sync.RWMutex
@@ -90,6 +91,12 @@ func (t *tenant) readyStorage() *ReadyStorage {
 	return t.readyS
 }
 
+func (t *tenant) info() storepb.InfoServer {
+	t.mtx.RLock()
+	defer t.mtx.RUnlock()
+	return t.infoAPI
+}
+
 func (t *tenant) store() *store.TSDBStore {
 	t.mtx.RLock()
 	defer t.mtx.RUnlock()
@@ -102,10 +109,11 @@ func (t *tenant) shipper() *shipper.Shipper {
 	return t.ship
 }
 
-func (t *tenant) set(storeTSDB *store.TSDBStore, tenantTSDB *tsdb.DB, ship *shipper.Shipper) {
+func (t *tenant) set(storeTSDB *store.TSDBStore, infoAPI storepb.InfoServer, tenantTSDB *tsdb.DB, ship *shipper.Shipper) {
 	t.readyS.Set(tenantTSDB)
 	t.mtx.Lock()
 	t.storeTSDB = storeTSDB
+	t.infoAPI = infoAPI
 	t.ship = ship
 	t.mtx.Unlock()
 }
@@ -246,6 +254,20 @@ func (t *MultiTSDB) RemoveLockFilesIfAny() error {
 	return merr.Err()
 }
 
+func (t *MultiTSDB) InfoAPIs() map[string]storepb.InfoServer {
+	t.mtx.RLock()
+	defer t.mtx.RUnlock()
+
+	res := make(map[string]storepb.InfoServer, len(t.tenants))
+	for k, tenant := range t.tenants {
+		s := tenant.info()
+		if s != nil {
+			res[k] = s
+		}
+	}
+	return res
+}
+
 func (t *MultiTSDB) TSDBStores() map[string]storepb.StoreServer {
 	t.mtx.RLock()
 	defer t.mtx.RUnlock()
@@ -292,7 +314,8 @@ func (t *MultiTSDB) startTSDB(logger log.Logger, tenantID string, tenant *tenant
 			t.allowOutOfOrderUpload,
 		)
 	}
-	tenant.set(store.NewTSDBStore(logger, reg, s, component.Receive, lbls), s, ship)
+	tsdbStore := store.NewTSDBStore(logger, reg, s, component.Receive, lbls)
+	tenant.set(tsdbStore, tsdbStore, s, ship)
 	level.Info(logger).Log("msg", "TSDB is now ready")
 	return nil
 }

@@ -847,6 +847,58 @@ func TestStoreSet_Rules_Discovery(t *testing.T) {
 				},
 				{
 					name: "StoreAPI discovered, no RulesAPI discovered",
+					ruleSpecs: func() []RuleSpec {
+						return []RuleSpec{
+							NewGRPCStoreSpec(nil, false),
+						}
+					},
+					storeSpecs: func() []StoreSpec {
+						return []StoreSpec{
+							NewGRPCStoreSpec(stores.orderAddrs[0], false),
+						}
+					},
+					expectedStores: 1,
+					expectedRules:  0,
+				},
+				{
+					name: "RulesAPI discovered",
+					ruleSpecs: func() []RuleSpec {
+						return []RuleSpec{
+							NewGRPCStoreSpec(stores.orderAddrs[0], false),
+						}
+					},
+					expectedStores: 1,
+					expectedRules:  1,
+				},
+				{
+					name: "RulesAPI discovered",
+					storeSpecs: func() []StoreSpec {
+						return []StoreSpec{
+							NewGRPCStoreSpec(stores.orderAddrs[0], false),
+						}
+					},
+					ruleSpecs: func() []RuleSpec {
+						return []RuleSpec{
+							NewGRPCStoreSpec(stores.orderAddrs[0], false),
+						}
+					},
+					expectedStores: 1,
+					expectedRules:  1,
+				},
+			},
+		},
+		{
+			name: "StoreAPI discovery first, eventually discovered RulesAPI",
+			states: []discoveryState{
+				{
+					name:           "no stores",
+					storeSpecs:     nil,
+					ruleSpecs:      nil,
+					expectedRules:  0,
+					expectedStores: 0,
+				},
+				{
+					name: "StoreAPI discovered, no RulesAPI discovered",
 					storeSpecs: func() []StoreSpec {
 						return []StoreSpec{
 							NewGRPCStoreSpec(stores.orderAddrs[0], false),
